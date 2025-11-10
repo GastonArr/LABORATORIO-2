@@ -1,29 +1,43 @@
 <?php
+/**
+ * Formulario de alta de viajes.
+ * Documentado línea a línea para comprender cómo se arma el viaje con chofer, transporte y destino.
+ */
+
+// Conexión a la base de datos y helpers compartidos.
 require_once 'funciones/conexion.php';
 require_once 'funciones/funciones.php';
+// Evitamos accesos no autenticados.
 RequiereSesion();
 
-if (EsChofer()) { // Se impide que los choferes accedan a la carga de viajes según los permisos definidos.
-    Redireccionar('viajes_listado.php'); // Se redirige al listado para que solo vean sus propios viajes.
+// Los choferes no pueden crear viajes; si detectamos uno lo derivamos a su listado.
+if (EsChofer()) {
+    Redireccionar('viajes_listado.php');
 }
 
+// Se prepara la conexión a la base para consultar datos auxiliares.
 $MiConexion = ConexionBD();
 
+// Información utilizada por el template principal.
 $pageTitle = 'Registrar un nuevo viaje';
 $activePage = 'viaje_carga';
 
+// Listas para poblar los combos del formulario.
 $choferes = Listar_Choferes($MiConexion);
 $transportes = Listar_Transportes($MiConexion);
-$destinos = Listar_Destinos($MiConexion); // Se obtiene el listado de destinos para completar el selector correspondiente.
+$destinos = Listar_Destinos($MiConexion);
+// Usuario actual (servirá para saber quién registró el viaje si fuese necesario).
 $usuarioSesion = ObtenerUsuarioEnSesion();
 $creadoPorId = 0;
 if (isset($usuarioSesion['id'])) {
     $creadoPorId = $usuarioSesion['id'];
 }
 
+// Variables para controlar el mensaje de feedback al usuario.
 $Mensaje = '';
 $Estilo = 'warning';
 
+// Al enviar el formulario se validan los datos y eventualmente se inserta el registro.
 if (!empty($_POST['BotonRegistrar'])) {
     $Mensaje = Validar_Datos_Viaje($MiConexion);
     if (empty($Mensaje)) {
@@ -35,10 +49,12 @@ if (!empty($_POST['BotonRegistrar'])) {
     }
 }
 
+// Totales usados para iterar las listas dentro del HTML.
 $CantidadChoferes = count($choferes);
 $CantidadTransportes = count($transportes);
 $CantidadDestinos = count($destinos);
 
+// Cabecera y navegación comunes del panel.
 require_once 'includes/header.php';
 require_once 'includes/topbar.php';
 require_once 'includes/sidebar.php';
@@ -74,6 +90,7 @@ require_once 'includes/sidebar.php';
                                 <select class="form-select" id="chofer_id" name="chofer_id" required>
                                     <option value="">Selecciona una opción</option>
                                     <?php
+                                    // Se recuerda el chofer elegido en caso de errores de validación.
                                     $ChoferSeleccionado = !empty($_POST['chofer_id']) ? $_POST['chofer_id'] : '';
                                     for ($i = 0; $i < $CantidadChoferes; $i++) {
                                         $Seleccionado = (!empty($ChoferSeleccionado) && $ChoferSeleccionado == $choferes[$i]['id']) ? 'selected' : '';
@@ -136,4 +153,7 @@ require_once 'includes/sidebar.php';
         </div>
     </section>
 </main>
-<?php require_once 'includes/footer.php'; ?>
+<?php
+// Pie de página compartido del panel.
+require_once 'includes/footer.php';
+?>

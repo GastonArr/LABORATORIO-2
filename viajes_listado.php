@@ -1,35 +1,51 @@
 <?php
+/**
+ * Listado de viajes.
+ * Aquí se muestra cómo se filtra la información según el nivel del usuario y se construye la tabla.
+ */
+
+// Dependencias necesarias para la base y los helpers.
 require_once 'funciones/conexion.php';
 require_once 'funciones/funciones.php';
+// Solo usuarios autenticados pueden ingresar.
 RequiereSesion();
 
+// Conexión activa a la base de datos.
 $MiConexion = ConexionBD();
 
+// Variables que aprovecha el layout general del sitio.
 $pageTitle = 'Listado de viajes registrados';
 $activePage = 'viajes_listado';
 
+// Datos del usuario actual para determinar permisos y filtros.
 $usuarioActual = ObtenerUsuarioEnSesion();
 $esChofer = isset($usuarioActual['id_nivel']) && (int) $usuarioActual['id_nivel'] === 3;
 $choferFiltradoId = null;
 if ($esChofer && isset($usuarioActual['id'])) {
     $choferFiltradoId = $usuarioActual['id'];
-} // Se determina si es necesario filtrar los viajes por el chofer autenticado.
-$viajes = Listar_Viajes($MiConexion, $choferFiltradoId); // Se obtienen los viajes aplicando el filtro según el nivel del usuario.
+}
+// Se obtienen los viajes, filtrando por chofer si corresponde.
+$viajes = Listar_Viajes($MiConexion, $choferFiltradoId);
+
+// Flags que deciden qué columnas se muestran en función del rol.
 $mostrarCosto = true;
 $mostrarMontoChofer = true;
 $mostrarPorcentajeEnMonto = true;
 
 if (!empty($usuarioActual['id_nivel'])) {
     $nivelActual = (int) $usuarioActual['id_nivel'];
+    // Un chofer (nivel 3) no debería ver el costo del viaje ni el porcentaje aplicado.
     if ($nivelActual === 3) {
         $mostrarCosto = false;
         $mostrarPorcentajeEnMonto = false;
     }
+    // Un supervisor (nivel 2) puede ver el costo pero no lo que cobra el chofer.
     if ($nivelActual === 2) {
         $mostrarMontoChofer = false;
     }
 }
 
+// Partes comunes del template.
 require_once 'includes/header.php';
 require_once 'includes/topbar.php';
 require_once 'includes/sidebar.php';
@@ -75,6 +91,7 @@ require_once 'includes/sidebar.php';
                                 <?php
                                 $CantidadViajes = count($viajes);
                                 for ($i = 0; $i < $CantidadViajes; $i++) {
+                                    // Se formatea la fecha para mostrarla en formato dd/mm/aaaa.
                                     $FechaFormateada = '';
                                     if (!empty($viajes[$i]['fecha_programada'])) {
                                         $Timestamp = strtotime($viajes[$i]['fecha_programada']);
@@ -82,6 +99,7 @@ require_once 'includes/sidebar.php';
                                             $FechaFormateada = date('d/m/Y', $Timestamp);
                                         }
                                     }
+                                    // Se calcula cuánto cobra el chofer según el porcentaje definido.
                                     $MontoChofer = ((float) $viajes[$i]['costo'] * (int) $viajes[$i]['porcentaje_chofer']) / 100;
                                     ?>
                                     <tr>
@@ -111,4 +129,7 @@ require_once 'includes/sidebar.php';
         </div>
     </section>
 </main>
-<?php require_once 'includes/footer.php'; ?>
+<?php
+// Footer compartido.
+require_once 'includes/footer.php';
+?>
