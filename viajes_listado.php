@@ -15,10 +15,20 @@ if ($esChofer && isset($usuarioActual['id'])) {
     $choferFiltradoId = $usuarioActual['id'];
 } // Se determina si es necesario filtrar los viajes por el chofer autenticado.
 $viajes = Listar_Viajes($MiConexion, $choferFiltradoId); // Se obtienen los viajes aplicando el filtro según el nivel del usuario.
-$permisosListado = ObtenerPermisosListadoViajes($usuarioActual);
-$mostrarCosto = !empty($permisosListado['mostrar_costo']);
-$mostrarMontoChofer = !empty($permisosListado['mostrar_monto_chofer']);
-$mostrarPorcentajeEnMonto = !empty($permisosListado['mostrar_porcentaje_monto']);
+$mostrarCosto = true;
+$mostrarMontoChofer = true;
+$mostrarPorcentajeEnMonto = true;
+
+if (!empty($usuarioActual['id_nivel'])) {
+    $nivelActual = (int) $usuarioActual['id_nivel'];
+    if ($nivelActual === 3) {
+        $mostrarCosto = false;
+        $mostrarPorcentajeEnMonto = false;
+    }
+    if ($nivelActual === 2) {
+        $mostrarMontoChofer = false;
+    }
+}
 
 require_once 'includes/header.php';
 require_once 'includes/topbar.php';
@@ -62,32 +72,37 @@ require_once 'includes/sidebar.php';
                                     <td colspan="<?php echo 5 + (int) $mostrarCosto + (int) $mostrarMontoChofer; ?>" class="text-center">No hay viajes registrados.</td>
                                 </tr>
                             <?php else: ?>
-                                <?php foreach ($viajes as $index => $viaje): ?>
-                                    <?php
-                                    $montoChofer = isset($viaje['monto_chofer'])
-                                        ? (float) $viaje['monto_chofer']
-                                        : CalcularMontoChofer((float) $viaje['costo'], (int) $viaje['porcentaje_chofer']);
-                                    $filaClase = ObtenerClaseFila($viaje['fecha_programada']);
+                                <?php
+                                $CantidadViajes = count($viajes);
+                                for ($i = 0; $i < $CantidadViajes; $i++) {
+                                    $FechaFormateada = '';
+                                    if (!empty($viajes[$i]['fecha_programada'])) {
+                                        $Timestamp = strtotime($viajes[$i]['fecha_programada']);
+                                        if ($Timestamp != false) {
+                                            $FechaFormateada = date('d/m/Y', $Timestamp);
+                                        }
+                                    }
+                                    $MontoChofer = ((float) $viajes[$i]['costo'] * (int) $viajes[$i]['porcentaje_chofer']) / 100;
                                     ?>
-                                    <tr class="<?php echo $filaClase; ?>">
-                                        <td><?php echo $index + 1; ?></td>
-                                        <td><?php echo htmlspecialchars(FormatearFechaEspaniol($viaje['fecha_programada'])); ?></td>
-                                        <td><?php echo htmlspecialchars($viaje['destino']); ?></td>
-                                        <td><?php echo htmlspecialchars($viaje['marca'] . ' - ' . $viaje['modelo'] . ' - ' . $viaje['patente']); ?></td>
-                                        <td><?php echo htmlspecialchars($viaje['chofer_apellido'] . ', ' . $viaje['chofer_nombre']); ?></td>
+                                    <tr>
+                                        <td><?php echo $i + 1; ?></td>
+                                        <td><?php echo $FechaFormateada; ?></td>
+                                        <td><?php echo $viajes[$i]['destino']; ?></td>
+                                        <td><?php echo $viajes[$i]['marca'] . ' - ' . $viajes[$i]['modelo'] . ' - ' . $viajes[$i]['patente']; ?></td>
+                                        <td><?php echo $viajes[$i]['chofer_apellido'] . ', ' . $viajes[$i]['chofer_nombre']; ?></td>
                                         <?php if ($mostrarCosto): ?>
-                                            <td>$ <?php echo number_format((float) $viaje['costo'], 2, ',', '.'); ?></td>
+                                            <td>$ <?php echo number_format((float) $viajes[$i]['costo'], 2, ',', '.'); ?></td>
                                         <?php endif; ?>
                                         <?php if ($mostrarMontoChofer): ?>
                                             <td>
-                                                $ <?php echo number_format($montoChofer, 2, ',', '.'); ?>
+                                                $ <?php echo number_format($MontoChofer, 2, ',', '.'); ?>
                                                 <?php if ($mostrarPorcentajeEnMonto): ?>
-                                                    (<?php echo (int) $viaje['porcentaje_chofer']; ?>%)
+                                                    (<?php echo (int) $viajes[$i]['porcentaje_chofer']; ?>%)
                                                 <?php endif; ?>
                                             </td>
                                         <?php endif; ?>
                                     </tr>
-                                <?php endforeach; ?>
+                                <?php } ?>
                             <?php endif; ?>
                         </tbody>
                     </table>
