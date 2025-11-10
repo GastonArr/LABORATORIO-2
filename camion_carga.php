@@ -14,99 +14,26 @@ $activePage = 'camion_carga'; // Se establece el identificador de la página act
 
 $marcas = Listar_Marcas($MiConexion); // Se obtienen todas las marcas registradas para alimentar el selector del formulario.
 
-$errors = array(); // Se inicializa el arreglo que almacenará los mensajes de validación.
-$success = false; // Se prepara un indicador para mostrar el mensaje de guardado exitoso.
-$marcaId = ''; // Se guarda la selección actual de la marca para repoblar el formulario ante errores.
-$modelo = ''; // Se inicializa el campo del modelo del camión.
-$anio = ''; // Se inicializa el campo del año del vehículo.
-$patente = ''; // Se inicializa la patente para mantener la entrada del usuario.
-$disponible = true; // Se asume que el transporte se cargará habilitado salvo que el usuario desmarque la opción.
+$Mensaje = '';
+$Estilo = 'warning';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') { // Se detecta el envío del formulario para procesar los datos.
-    if (isset($_POST['marca_id'])) { // Se obtiene la marca seleccionada desde el formulario.
-        $marcaId = $_POST['marca_id'];
-    } else {
-        $marcaId = '';
-    }
-
-    if (isset($_POST['modelo'])) { // Se limpia el modelo eliminando espacios al inicio y final.
-        $modelo = trim($_POST['modelo']);
-    } else {
-        $modelo = '';
-    }
-
-    if (isset($_POST['anio'])) { // Se obtiene el año del vehículo como cadena para validarlo manualmente.
-        $anio = trim($_POST['anio']);
-    } else {
-        $anio = '';
-    }
-
-    if (isset($_POST['patente'])) { // Se normaliza la patente: se quitan espacios y se convierte a mayúsculas.
-        $patente = strtoupper(str_replace(' ', '', $_POST['patente']));
-    } else {
-        $patente = '';
-    }
-    $disponible = isset($_POST['disponible']); // Se interpreta el estado del checkbox de disponibilidad.
-
-    $marcaValida = false; // Se prepara una bandera para validar la marca seleccionada.
-    for ($i = 0; $i < count($marcas); $i++) { // Se recorren las marcas disponibles para comparar el identificador recibido.
-        if ((string) $marcas[$i]['id'] === (string) $marcaId) {
-            $marcaValida = true;
-            break;
+if (!empty($_POST['BotonRegistrar'])) {
+    $Mensaje = Validar_Datos_Transporte($MiConexion);
+    if (empty($Mensaje)) {
+        if (Insertar_Transporte($MiConexion) != false) {
+            $Mensaje = 'Se ha registrado correctamente.';
+            $_POST = array();
+            $Estilo = 'success';
         }
-    }
-    if (!$marcaId || !$marcaValida) { // Se verifica que se haya elegido una marca existente.
-        $errors[] = 'Debes seleccionar una marca válida.'; // Se agrega un mensaje de error cuando la marca es inválida.
-    }
-
-    if (!CampoRequerido($modelo) || strlen($modelo) < 2) { // Se valida que el modelo tenga contenido y una longitud mínima para evitar valores sin sentido.
-        $errors[] = 'El modelo es obligatorio y debe tener al menos 2 caracteres.'; // Se informa al usuario la regla aplicada.
-    }
-
-    $anioNormalizado = 0; // Se prepara una variable numérica para almacenar el año validado.
-    if ($anio !== '') { // Se ingresa a validar solamente si el usuario escribió un año.
-        if (!ctype_digit($anio) || strlen($anio) !== 4) { // Se verifica que el año contenga exactamente cuatro dígitos numéricos.
-            $errors[] = 'El año debe estar compuesto por 4 dígitos.'; // Se detalla el motivo del error.
-        } else {
-            $anioEntero = (int) $anio; // Se convierte la cadena numérica en entero para aplicar reglas adicionales.
-            $anioActual = (int) date('Y'); // Se obtiene el año actual para comparar límites lógicos.
-            if ($anioEntero < 1990 || $anioEntero > $anioActual + 1) { // Se valida que el año esté dentro de un rango razonable.
-                $errors[] = 'El año debe estar entre 1990 y ' . ($anioActual + 1) . '.'; // Se informa el rango permitido dinámicamente.
-            } else {
-                $anioNormalizado = $anioEntero; // Se conserva el año validado para guardarlo en la base de datos.
-            }
-        }
-    }
-
-    if ($patente === '') { // Se controla que la patente tenga contenido.
-        $errors[] = 'La patente es obligatoria.'; // Se indica al usuario que debe completar el dato.
-    } else {
-        $longitudPatente = strlen($patente);
-        $patenteValida = $longitudPatente >= 6 && $longitudPatente <= 7 && ctype_alnum($patente);
-        if (!$patenteValida) { // Se controla que la patente cumpla con el formato alfanumérico de 6 o 7 caracteres.
-            $errors[] = 'La patente debe tener entre 6 y 7 caracteres alfanuméricos.'; // Se comunica el problema al usuario.
-        }
-    }
-
-    if (!$errors && ExistePatente($patente, $MiConexion)) { // Se verifica que la patente no esté duplicada en la base de datos.
-        $errors[] = 'La patente ingresada ya se encuentra registrada.'; // Se detiene el proceso avisando que el dato ya existe.
-    }
-
-    $disponibleValor = $disponible ? 1 : 0; // Se transforma el valor booleano del checkbox en entero para almacenarlo.
-
-    if (!$errors) { // Se procede a guardar el transporte únicamente cuando no se detectaron errores.
-        Insertar_Transporte(array( // Se llama a la función que inserta el transporte en la base de datos.
-            'marca_id' => (int) $marcaId, // Se envía la marca seleccionada casteada a entero.
-            'modelo' => $modelo, // Se envía el modelo ya validado.
-            'patente' => $patente, // Se envía la patente normalizada.
-            'anio' => $anioNormalizado, // Se envía el año validado o cero si no se informó.
-            'disponible' => $disponibleValor, // Se envía el estado de disponibilidad del transporte.
-        ), $MiConexion);
-        $success = true; // Se activa la bandera para mostrar el mensaje de éxito.
-        $marcaId = $modelo = $anio = $patente = ''; // Se limpian los campos para evitar que queden valores previos en el formulario.
-        $disponible = true; // Se restablece el checkbox como seleccionado luego de guardar.
     }
 }
+
+$CantidadMarcas = count($marcas);
+$MarcaSeleccionada = !empty($_POST['marca_id']) ? $_POST['marca_id'] : '';
+$ModeloValor = !empty($_POST['modelo']) ? $_POST['modelo'] : '';
+$AnioValor = !empty($_POST['anio']) ? $_POST['anio'] : '';
+$PatenteValor = !empty($_POST['patente']) ? $_POST['patente'] : '';
+$DisponibleMarcado = !empty($_POST) ? !empty($_POST['disponible']) : true;
 
 require_once 'includes/header.php'; // Se carga el encabezado común del panel.
 require_once 'includes/topbar.php'; // Se incluye la barra superior con los datos del usuario logueado.
@@ -134,53 +61,48 @@ require_once 'includes/sidebar.php'; // Se incluye el menú lateral que respeta 
                         <div class="alert alert-info" role="alert">
                             <i class="bi bi-info-circle me-1"></i> Los campos indicados con (*) son requeridos
                         </div>
-                        <?php if ($errors): // Se muestran las alertas solo cuando existen errores de validación. ?>
-                            <div class="alert alert-warning" role="alert">
-                                <i class="bi bi-exclamation-triangle me-1"></i>
-                                <ul class="mb-0">
-                                    <?php foreach ($errors as $error): ?>
-                                        <li><?php echo htmlspecialchars($error); ?></li>
-                                    <?php endforeach; ?>
-                                </ul>
+                        <?php if (!empty($Mensaje)) { ?>
+                            <div class="alert alert-<?php echo $Estilo; ?>" role="alert">
+                                <?php echo $Mensaje; ?>
                             </div>
-                        <?php endif; ?>
-                        <?php if ($success): // Se muestra el mensaje de confirmación cuando el guardado fue exitoso. ?>
-                            <div class="alert alert-success" role="alert">
-                                <i class="bi bi-check-circle me-1"></i> ¡El transporte se registró correctamente!
-                            </div>
-                        <?php endif; ?>
+                        <?php } ?>
                         <form class="row g-3" method="post" action="" novalidate>
                             <div class="col-12">
                                 <label for="marca_id" class="form-label">Marca (*)</label>
                                 <select class="form-select" id="marca_id" name="marca_id" required>
                                     <option value="">Selecciona una opción</option>
-                                    <?php foreach ($marcas as $marca): // Se recorren las marcas para crear cada opción del selector. ?>
-                                        <option value="<?php echo htmlspecialchars($marca['id']); ?>" <?php echo (string) $marca['id'] === (string) $marcaId ? 'selected' : ''; ?>><?php echo htmlspecialchars($marca['denominacion']); ?></option>
-                                    <?php endforeach; ?>
+                                    <?php
+                                    for ($i = 0; $i < $CantidadMarcas; $i++) {
+                                        $Seleccionado = (!empty($MarcaSeleccionada) && $MarcaSeleccionada == $marcas[$i]['id']) ? 'selected' : '';
+                                        ?>
+                                        <option value="<?php echo $marcas[$i]['id']; ?>" <?php echo $Seleccionado; ?>>
+                                            <?php echo $marcas[$i]['denominacion']; ?>
+                                        </option>
+                                    <?php } ?>
                                 </select>
                             </div>
                             <div class="col-12">
                                 <label for="modelo" class="form-label">Modelo (*)</label>
-                                <input type="text" class="form-control" id="modelo" name="modelo" value="<?php echo htmlspecialchars($modelo); ?>" required>
+                                <input type="text" class="form-control" id="modelo" name="modelo" value="<?php echo !empty($ModeloValor) ? htmlspecialchars($ModeloValor) : ''; ?>" required>
                             </div>
                             <div class="col-6">
                                 <label for="anio" class="form-label">Año</label>
-                                <input type="text" class="form-control" id="anio" name="anio" value="<?php echo htmlspecialchars($anio); ?>" placeholder="AAAA">
+                                <input type="text" class="form-control" id="anio" name="anio" value="<?php echo !empty($AnioValor) ? htmlspecialchars($AnioValor) : ''; ?>" placeholder="AAAA">
                             </div>
                             <div class="col-6">
                                 <label for="patente" class="form-label">Patente (*)</label>
-                                <input type="text" class="form-control" id="patente" name="patente" value="<?php echo htmlspecialchars($patente); ?>" required>
+                                <input type="text" class="form-control" id="patente" name="patente" value="<?php echo !empty($PatenteValor) ? htmlspecialchars($PatenteValor) : ''; ?>" required>
                             </div>
                             <div class="col-12">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="disponible" name="disponible" <?php echo $disponible ? 'checked' : ''; ?>>
+                                    <input class="form-check-input" type="checkbox" id="disponible" name="disponible" <?php echo $DisponibleMarcado ? 'checked' : ''; ?>>
                                     <label class="form-check-label" for="disponible">
                                         Habilitado
                                     </label>
                                 </div>
                             </div>
                             <div class="text-center">
-                                <button class="btn btn-primary" type="submit">Registrar</button>
+                                <button class="btn btn-primary" type="submit" name="BotonRegistrar" value="Registrar">Registrar</button>
                                 <a href="camion_carga.php" class="btn btn-secondary">Limpiar Campos</a>
                                 <a href="index.php" class="text-primary fw-bold">Volver al index</a>
                             </div>

@@ -163,21 +163,6 @@ function EsChofer()
     return !empty($Usuario['id_nivel']) && $Usuario['id_nivel'] == 3;
 }
 
-function ObtenerPermisosListadoViajes($Usuario = null)
-{
-    if ($Usuario === null) {
-        $Usuario = ObtenerUsuarioEnSesion();
-    }
-
-    $Nivel = isset($Usuario['id_nivel']) ? (int) $Usuario['id_nivel'] : 0;
-
-    return array(
-        'mostrar_costo' => $Nivel !== 3,
-        'mostrar_monto_chofer' => $Nivel !== 2,
-        'mostrar_porcentaje_monto' => $Nivel !== 3,
-    );
-}
-
 function Listar_Choferes($vConexion)
 {
     $Listado = array();
@@ -248,48 +233,6 @@ function Listar_Marcas($vConexion)
 }
 
 
-function NormalizarImporte($Valor)
-{
-    $Valor = str_replace('.', '', $Valor);
-    $Valor = str_replace(',', '.', $Valor);
-    $Valor = trim($Valor);
-
-    if ($Valor === '') {
-        return null;
-    }
-
-    if (!is_numeric($Valor)) {
-        return null;
-    }
-
-    return (float) $Valor;
-}
-
-function ConvertirFechaFormulario($Fecha)
-{
-    $Fecha = trim($Fecha);
-
-    if ($Fecha === '') {
-        return null;
-    }
-
-    $Partes = explode('/', $Fecha);
-
-    if (count($Partes) != 3) {
-        return null;
-    }
-
-    $Dia = (int) $Partes[0];
-    $Mes = (int) $Partes[1];
-    $Anio = (int) $Partes[2];
-
-    if (!checkdate($Mes, $Dia, $Anio)) {
-        return null;
-    }
-
-    return sprintf('%04d-%02d-%02d', $Anio, $Mes, $Dia);
-}
-
 function Listar_Destinos($vConexion)
 {
     $Listado = array();
@@ -310,73 +253,292 @@ function Listar_Destinos($vConexion)
     return $Listado;
 }
 
-function Insertar_Chofer($Datos, $vConexion)
+function Validar_Datos_Chofer($vConexion)
 {
+    $Mensaje = '';
 
-    $Apellido = isset($Datos['apellido']) ? $Datos['apellido'] : '';
-    $Nombre = isset($Datos['nombre']) ? $Datos['nombre'] : '';
-    $Dni = isset($Datos['dni']) ? $Datos['dni'] : '';
-    $Usuario = isset($Datos['usuario']) ? strtolower($Datos['usuario']) : '';
-    $Clave = isset($Datos['clave']) ? $Datos['clave'] : '';
+    $Apellido = isset($_POST['apellido']) ? trim($_POST['apellido']) : '';
+    $Nombre = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
+    $Dni = isset($_POST['dni']) ? trim($_POST['dni']) : '';
+    $Usuario = isset($_POST['usuario']) ? trim($_POST['usuario']) : '';
+    $Clave = isset($_POST['clave']) ? trim($_POST['clave']) : '';
+
+    if (strlen($Apellido) < 2) {
+        $Mensaje .= 'Debes ingresar un apellido con al menos 2 caracteres. <br />';
+    }
+
+    if (strlen($Nombre) < 2) {
+        $Mensaje .= 'Debes ingresar un nombre con al menos 2 caracteres. <br />';
+    }
+
+    if ($Dni === '') {
+        $Mensaje .= 'Debes ingresar el DNI. <br />';
+    } else {
+        if (!ctype_digit($Dni) || strlen($Dni) < 7 || strlen($Dni) > 8) {
+            $Mensaje .= 'El DNI debe tener 7 u 8 dígitos numéricos. <br />';
+        } else {
+            if (ExisteDNI($Dni, $vConexion)) {
+                $Mensaje .= 'El DNI ingresado ya se encuentra registrado. <br />';
+            }
+        }
+    }
+
+    if ($Usuario === '') {
+        $Mensaje .= 'Debes ingresar el usuario. <br />';
+    } else {
+        $Usuario = strtolower($Usuario);
+        $Permitidos = '._-';
+        $UsuarioValido = true;
+        for ($i = 0; $i < strlen($Usuario); $i++) {
+            $Caracter = $Usuario[$i];
+            if (!ctype_alnum($Caracter) && strpos($Permitidos, $Caracter) === false) {
+                $UsuarioValido = false;
+                break;
+            }
+        }
+
+        if (!$UsuarioValido) {
+            $Mensaje .= 'El usuario solo puede tener letras, números, puntos, guiones o guiones bajos. <br />';
+        } elseif (ExisteUsuario($Usuario, $vConexion)) {
+            $Mensaje .= 'El usuario ingresado ya existe. <br />';
+        }
+    }
+
+    if ($Clave === '') {
+        $Mensaje .= 'Debes ingresar la clave. <br />';
+    } elseif (strlen($Clave) < 5) {
+        $Mensaje .= 'La clave debe tener al menos 5 caracteres. <br />';
+    }
+
+    foreach ($_POST as $Id => $Valor) {
+        $_POST[$Id] = trim(strip_tags($Valor));
+    }
+
+    if ($Usuario !== '') {
+        $_POST['usuario'] = $Usuario;
+    }
+
+    return $Mensaje;
+}
+
+function Validar_Datos_Transporte($vConexion)
+{
+    $Mensaje = '';
+
+    $MarcaId = isset($_POST['marca_id']) ? (int) $_POST['marca_id'] : 0;
+    $Modelo = isset($_POST['modelo']) ? trim($_POST['modelo']) : '';
+    $Anio = isset($_POST['anio']) ? trim($_POST['anio']) : '';
+    $Patente = isset($_POST['patente']) ? strtoupper(str_replace(' ', '', $_POST['patente'])) : '';
+
+    if ($MarcaId == 0) {
+        $Mensaje .= 'Debes seleccionar una marca. <br />';
+    } else {
+        $SQL = "SELECT id FROM marcas WHERE id = " . $MarcaId;
+        $rs = mysqli_query($vConexion, $SQL);
+        if ($rs != false) {
+            $data = mysqli_fetch_array($rs);
+            if (empty($data)) {
+                $Mensaje .= 'La marca seleccionada no es válida. <br />';
+            }
+            mysqli_free_result($rs);
+        }
+    }
+
+    if (strlen($Modelo) < 2) {
+        $Mensaje .= 'Debes ingresar el modelo. <br />';
+    }
+
+    if ($Anio !== '') {
+        if (!ctype_digit($Anio) || strlen($Anio) != 4) {
+            $Mensaje .= 'El año debe tener 4 dígitos. <br />';
+        } else {
+            $AnioEntero = (int) $Anio;
+            $AnioActual = (int) date('Y');
+            if ($AnioEntero < 1990 || $AnioEntero > $AnioActual + 1) {
+                $Mensaje .= 'El año debe estar entre 1990 y ' . ($AnioActual + 1) . '. <br />';
+            }
+        }
+    }
+
+    if ($Patente === '') {
+        $Mensaje .= 'Debes ingresar la patente. <br />';
+    } else {
+        $LongitudPatente = strlen($Patente);
+        if ($LongitudPatente < 6 || $LongitudPatente > 7 || !ctype_alnum($Patente)) {
+            $Mensaje .= 'La patente debe tener entre 6 y 7 caracteres alfanuméricos. <br />';
+        } elseif (ExistePatente($Patente, $vConexion)) {
+            $Mensaje .= 'La patente ingresada ya se encuentra registrada. <br />';
+        }
+    }
+
+    foreach ($_POST as $Id => $Valor) {
+        $_POST[$Id] = trim(strip_tags($Valor));
+    }
+
+    if ($Patente !== '') {
+        $_POST['patente'] = $Patente;
+    }
+
+    return $Mensaje;
+}
+
+function Validar_Datos_Viaje($vConexion)
+{
+    $Mensaje = '';
+
+    $ChoferId = isset($_POST['chofer_id']) ? (int) $_POST['chofer_id'] : 0;
+    $TransporteId = isset($_POST['transporte_id']) ? (int) $_POST['transporte_id'] : 0;
+    $DestinoId = isset($_POST['destino_id']) ? (int) $_POST['destino_id'] : 0;
+    $Fecha = isset($_POST['fecha_programada']) ? trim($_POST['fecha_programada']) : '';
+    $CostoIngresado = isset($_POST['costo']) ? trim($_POST['costo']) : '';
+    $Porcentaje = isset($_POST['porcentaje_chofer']) ? trim($_POST['porcentaje_chofer']) : '';
+
+    if ($ChoferId == 0) {
+        $Mensaje .= 'Debes seleccionar un chofer. <br />';
+    } else {
+        $SQL = "SELECT id FROM usuarios WHERE id = " . $ChoferId . " AND id_nivel = 3 AND activo = 1";
+        $rs = mysqli_query($vConexion, $SQL);
+        if ($rs != false) {
+            $data = mysqli_fetch_array($rs);
+            if (empty($data)) {
+                $Mensaje .= 'El chofer seleccionado no es válido. <br />';
+            }
+            mysqli_free_result($rs);
+        }
+    }
+
+    if ($TransporteId == 0) {
+        $Mensaje .= 'Debes seleccionar un transporte. <br />';
+    } else {
+        $SQL = "SELECT id FROM transportes WHERE id = " . $TransporteId . " AND disponible = 1";
+        $rs = mysqli_query($vConexion, $SQL);
+        if ($rs != false) {
+            $data = mysqli_fetch_array($rs);
+            if (empty($data)) {
+                $Mensaje .= 'El transporte seleccionado no es válido. <br />';
+            }
+            mysqli_free_result($rs);
+        }
+    }
+
+    if ($DestinoId == 0) {
+        $Mensaje .= 'Debes seleccionar un destino. <br />';
+    } else {
+        $SQL = "SELECT id FROM destinos WHERE id = " . $DestinoId;
+        $rs = mysqli_query($vConexion, $SQL);
+        if ($rs != false) {
+            $data = mysqli_fetch_array($rs);
+            if (empty($data)) {
+                $Mensaje .= 'El destino seleccionado no es válido. <br />';
+            }
+            mysqli_free_result($rs);
+        }
+    }
+
+    if ($Fecha === '') {
+        $Mensaje .= 'Debes ingresar la fecha programada. <br />';
+    } else {
+        $Partes = explode('/', $Fecha);
+        if (count($Partes) != 3) {
+            $Mensaje .= 'La fecha debe tener el formato dd/mm/aaaa. <br />';
+        } else {
+            $Dia = (int) $Partes[0];
+            $Mes = (int) $Partes[1];
+            $Anio = (int) $Partes[2];
+            if (!checkdate($Mes, $Dia, $Anio)) {
+                $Mensaje .= 'La fecha ingresada no es válida. <br />';
+            } else {
+                $_POST['fecha_sql'] = sprintf('%04d-%02d-%02d', $Anio, $Mes, $Dia);
+            }
+        }
+    }
+
+    if ($CostoIngresado === '') {
+        $Mensaje .= 'Debes ingresar el costo del viaje. <br />';
+    } else {
+        $CostoNormalizado = str_replace('.', '', $CostoIngresado);
+        $CostoNormalizado = str_replace(',', '.', $CostoNormalizado);
+        if (!is_numeric($CostoNormalizado) || (float) $CostoNormalizado <= 0) {
+            $Mensaje .= 'El costo debe ser un número mayor a 0. <br />';
+        } else {
+            $_POST['costo_normalizado'] = (float) $CostoNormalizado;
+        }
+    }
+
+    if ($Porcentaje === '') {
+        $Mensaje .= 'Debes ingresar el porcentaje del chofer. <br />';
+    } else {
+        if (!ctype_digit($Porcentaje)) {
+            $Mensaje .= 'El porcentaje debe ser un número entero. <br />';
+        } else {
+            $Valor = (int) $Porcentaje;
+            if ($Valor < 0 || $Valor > 100) {
+                $Mensaje .= 'El porcentaje debe estar entre 0 y 100. <br />';
+            }
+        }
+    }
+
+    foreach ($_POST as $Id => $Valor) {
+        $_POST[$Id] = trim(strip_tags($Valor));
+    }
+
+    return $Mensaje;
+}
+
+function Insertar_Chofer($vConexion)
+{
+    $Apellido = isset($_POST['apellido']) ? $_POST['apellido'] : '';
+    $Nombre = isset($_POST['nombre']) ? $_POST['nombre'] : '';
+    $Dni = isset($_POST['dni']) ? $_POST['dni'] : '';
+    $Usuario = isset($_POST['usuario']) ? strtolower($_POST['usuario']) : '';
+    $Clave = isset($_POST['clave']) ? $_POST['clave'] : '';
 
     $SQL = "INSERT INTO usuarios (apellido, nombre, dni, usuario, clave, activo, id_nivel, fecha_creacion)"
         . " VALUES ('" . $Apellido . "', '" . $Nombre . "', '" . $Dni . "', '" . $Usuario . "', '" . $Clave . "', 1, 3, NOW())";
 
-    $Insertado = mysqli_query($vConexion, $SQL);
-
-    if ($Insertado == false) {
+    if (!mysqli_query($vConexion, $SQL)) {
         die('No se pudo ejecutar la inserción.');
     }
 
-    return array(
-        'id' => mysqli_insert_id($vConexion),
-        'usuario' => $Usuario,
-        'clave' => $Clave,
-    );
+    return true;
 }
 
-function Insertar_Transporte($Datos, $vConexion)
+function Insertar_Transporte($vConexion)
 {
-
-    $Marca = isset($Datos['marca_id']) ? $Datos['marca_id'] : 0;
-    $Modelo = isset($Datos['modelo']) ? $Datos['modelo'] : '';
-    $Patente = isset($Datos['patente']) ? $Datos['patente'] : '';
-    $Anio = isset($Datos['anio']) ? $Datos['anio'] : 0;
-    $Disponible = isset($Datos['disponible']) ? $Datos['disponible'] : 0;
+    $Marca = isset($_POST['marca_id']) ? (int) $_POST['marca_id'] : 0;
+    $Modelo = isset($_POST['modelo']) ? $_POST['modelo'] : '';
+    $Patente = isset($_POST['patente']) ? $_POST['patente'] : '';
+    $Anio = isset($_POST['anio']) ? (int) $_POST['anio'] : 0;
+    $Disponible = !empty($_POST['disponible']) ? 1 : 0;
 
     $SQL = "INSERT INTO transportes (marca_id, modelo, patente, anio, disponible, fecha_creacion)"
         . " VALUES (" . $Marca . ", '" . $Modelo . "', '" . $Patente . "', " . $Anio . ", " . $Disponible . ", NOW())";
 
-    $Insertado = mysqli_query($vConexion, $SQL);
-
-    if ($Insertado == false) {
+    if (!mysqli_query($vConexion, $SQL)) {
         die('No se pudo ejecutar la inserción.');
     }
 
-    return mysqli_insert_id($vConexion);
+    return true;
 }
 
-function Insertar_Viaje($Datos, $vConexion)
+function Insertar_Viaje($vConexion)
 {
-
-    $Chofer = isset($Datos['chofer_id']) ? $Datos['chofer_id'] : 0;
-    $Transporte = isset($Datos['transporte_id']) ? $Datos['transporte_id'] : 0;
-    $Fecha = isset($Datos['fecha_programada']) ? $Datos['fecha_programada'] : '';
-    $Destino = isset($Datos['destino_id']) ? $Datos['destino_id'] : 0;
-    $Costo = isset($Datos['costo']) ? $Datos['costo'] : 0;
-    $Porcentaje = isset($Datos['porcentaje_chofer']) ? $Datos['porcentaje_chofer'] : 0;
-    $CreadoPor = !empty($Datos['creado_por']) ? $Datos['creado_por'] : 'NULL';
+    $Chofer = isset($_POST['chofer_id']) ? (int) $_POST['chofer_id'] : 0;
+    $Transporte = isset($_POST['transporte_id']) ? (int) $_POST['transporte_id'] : 0;
+    $Destino = isset($_POST['destino_id']) ? (int) $_POST['destino_id'] : 0;
+    $Fecha = !empty($_POST['fecha_sql']) ? $_POST['fecha_sql'] : '';
+    $Costo = !empty($_POST['costo_normalizado']) ? (float) $_POST['costo_normalizado'] : 0;
+    $Porcentaje = isset($_POST['porcentaje_chofer']) ? (int) $_POST['porcentaje_chofer'] : 0;
+    $CreadoPor = !empty($_SESSION['Usuario_ID']) ? (int) $_SESSION['Usuario_ID'] : 'NULL';
 
     $SQL = "INSERT INTO viajes (chofer_id, transporte_id, fecha_programada, destino_id, costo, porcentaje_chofer, creado_por, fecha_creacion)"
         . " VALUES (" . $Chofer . ", " . $Transporte . ", '" . $Fecha . "', " . $Destino . ", " . $Costo . ", " . $Porcentaje . ", " . $CreadoPor . ", NOW())";
 
-    $Insertado = mysqli_query($vConexion, $SQL);
-
-    if ($Insertado == false) {
+    if (!mysqli_query($vConexion, $SQL)) {
         die('No se pudo ejecutar la inserción.');
     }
 
-    return mysqli_insert_id($vConexion);
+    return true;
 }
 
 function Listar_Viajes($vConexion, $ChoferId = null)
@@ -408,7 +570,6 @@ function Listar_Viajes($vConexion, $ChoferId = null)
             $Listado[$i]['destino'] = $data['destino'];
             $Listado[$i]['costo'] = $data['costo'];
             $Listado[$i]['porcentaje_chofer'] = $data['porcentaje_chofer'];
-            $Listado[$i]['monto_chofer'] = CalcularMontoChofer((float) $data['costo'], (int) $data['porcentaje_chofer']);
             $Listado[$i]['chofer_apellido'] = $data['chofer_apellido'];
             $Listado[$i]['chofer_nombre'] = $data['chofer_nombre'];
             $Listado[$i]['chofer_dni'] = $data['chofer_dni'];
@@ -421,33 +582,6 @@ function Listar_Viajes($vConexion, $ChoferId = null)
     }
 
     return $Listado;
-}
-
-function CampoRequerido($Valor)
-{
-    return trim($Valor) != '';
-}
-
-function ValidarDNI($Dni)
-{
-    $Dni = trim($Dni);
-    return $Dni != '' && ctype_digit($Dni) && strlen($Dni) >= 7 && strlen($Dni) <= 8;
-}
-
-function ValidarPorcentaje($Valor)
-{
-    $Valor = trim($Valor);
-
-    if ($Valor === '') {
-        return false;
-    }
-
-    if (!is_numeric($Valor)) {
-        return false;
-    }
-
-    $Numero = (int) $Valor;
-    return $Numero >= 0 && $Numero <= 100;
 }
 
 function ExisteUsuario($Usuario, $vConexion)
@@ -493,51 +627,4 @@ function ExistePatente($Patente, $vConexion)
     mysqli_free_result($rs);
 
     return !empty($Existe);
-}
-
-function FormatearFechaEspaniol($Fecha)
-{
-    if ($Fecha == '') {
-        return '';
-    }
-
-    $Timestamp = strtotime($Fecha);
-
-    if ($Timestamp == false) {
-        return '';
-    }
-
-    return date('d/m/Y', $Timestamp);
-}
-
-function ObtenerClaseFila($FechaViaje)
-{
-    $Timestamp = strtotime($FechaViaje);
-
-    if ($Timestamp == false) {
-        return '';
-    }
-
-    $FechaNormalizada = date('Y-m-d', $Timestamp);
-    $Hoy = date('Y-m-d');
-    $Maniana = date('Y-m-d', strtotime($Hoy . ' +1 day'));
-
-    if ($FechaNormalizada < $Hoy) {
-        return 'fila-realizado';
-    }
-
-    if ($FechaNormalizada == $Hoy) {
-        return 'fila-hoy';
-    }
-
-    if ($FechaNormalizada == $Maniana) {
-        return 'fila-maniana';
-    }
-
-    return '';
-}
-
-function CalcularMontoChofer($Costo, $Porcentaje)
-{
-    return round($Costo * $Porcentaje / 100, 2);
 }

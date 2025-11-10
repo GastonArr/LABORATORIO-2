@@ -10,20 +10,10 @@ $MiConexion = ConexionBD();
 
 $pageTitle = 'Panel de Administración - Login';
 $Mensaje = '';
-$usuario = '';
 
 if (!empty($_POST['BotonLogin'])) {
-    if (isset($_POST['usuario'])) {
-        $usuario = strtolower(trim($_POST['usuario']));
-    } else {
-        $usuario = '';
-    }
-
-    if (isset($_POST['clave'])) {
-        $clave = trim($_POST['clave']);
-    } else {
-        $clave = '';
-    }
+    $usuario = !empty($_POST['usuario']) ? strtolower(trim($_POST['usuario'])) : '';
+    $clave = !empty($_POST['clave']) ? trim($_POST['clave']) : '';
 
     if ($usuario === '' || $clave === '') {
         $Mensaje = 'Debes ingresar el usuario y la clave.';
@@ -78,7 +68,7 @@ require_once 'includes/header.php';
                                         <label for="usuario" class="form-label">Usuario (*)</label>
                                         <div class="input-group has-validation">
                                             <span class="input-group-text" id="inputGroupPrepend">@</span>
-                                            <input type="text" name="usuario" class="form-control" id="usuario" value="<?php echo htmlspecialchars($usuario); ?>" required>
+                                            <input type="text" name="usuario" class="form-control" id="usuario" value="<?php echo !empty($_POST['usuario']) ? htmlspecialchars($_POST['usuario']) : ''; ?>" required>
                                         </div>
                                     </div>
                                     <div class="col-12">
